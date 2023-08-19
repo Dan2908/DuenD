@@ -203,8 +203,16 @@ void UTiledMap::ResolveCross(const PositionPair position, FMapTileData& output)
 		}
 		else
 		{
-			// Edge cases to cross wall
-			output.SetType(eTileType::WALL_CROSS);
+			if (adjacent[eCoordinates::EAST] || adjacent[eCoordinates::WEST])
+			{
+				output.SetType(eTileType::WALL);
+				output.SetRotation(90.0);
+			}
+			else if (adjacent[eCoordinates::WEST])
+			{
+				// Edge cases to cross wall
+				output.SetType(eTileType::WALL_CROSS);
+			}
 		}
 	}
 }

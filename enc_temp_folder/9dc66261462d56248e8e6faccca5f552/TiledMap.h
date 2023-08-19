@@ -74,7 +74,8 @@ private:
         HORIZONTAL_WALL = '-',
         VERTICAL_WALL = '|',
         CROSS_WALL = '+',
-        FLOOR = 'f'
+        FLOOR = 'f',
+        NEW_LINE = '\n'
     };
     enum eCoordinates
     {
@@ -124,6 +125,7 @@ private:
 
     static void GetCellData(const PositionPair position, FMapTileData& output);
     static void ResolveCross(const PositionPair position, FMapTileData& output);
+    //static inline void ResolveCrosses(std::vector<PositionPair>& unresolvedCrosses, GridMap& gridMap, const float multiplier, TArray<FMapTileData>& output);
 
 public:
 

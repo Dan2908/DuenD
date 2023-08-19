@@ -1,11 +1,230 @@
-// Fill out your copyright notice in the Description page of Project Settings.
 #include "TiledMap.h"
 
-#include <map>
-#include <set>
-#include <utility>
-#include <vector>
+using PositionPair = TPair<int, int>;
 
+// ----------------------------------------- STATIC
+FJsonSerializableArray* UTiledMap::mCharacterMap = nullptr;
+
+// ----------------------------------------- METHODS
+
+// ----------------------------------------- 
+// UTiledMap
+// ----------------------------------------- 
+// ----------------------------------------- 
+TArray<FMapTileData> UTiledMap::LoadMapArray(const FString fileName, const float multiplier)
+{
+	TArray<FMapTileData> output;
+	FMapTileData outputElement;
+
+	PositionPair currentPosition = { 0, 0 };
+
+	if (ReadTextFile(fileName))
+	{
+		for (const auto& line : *mCharacterMap)
+		{
+			for (const auto& character : line)
+			{
+				GetCellData(currentPosition, outputElement);
+				if (outputElement.Type != eTileType::NONE)
+				{
+					outputElement.SetLocation(GetMultipliedLocation(currentPosition, multiplier));
+					output.Push(outputElement);
+
+					// Add a floor tiles under walls
+					if (isWall(character) || isCross(character))
+					{
+						outputElement.SetType(eTileType::FLOOR);
+						outputElement.SetRotation(0.0);
+						output.Push(outputElement);
+					}
+				}
+				// Advance Column
+				++currentPosition.Key;
+			}
+
+			// Advance Row
+			currentPosition.Key = 0;
+			++currentPosition.Value;
+		}
+	}
+	
+	// Destroy temp array
+	ClearCharacterMap();
+
+	return output;
+}
+
+// ----------------------------------------- 
+inline const bool UTiledMap::ReadTextFile(const FString fileName)
+{
+	mCharacterMap = new FJsonSerializableArray();
+	FString rawText;
+	// read file
+	const bool success = FFileHelper::LoadFileToString(rawText, *(FPaths::ProjectDir() + fileName));
+	
+	rawText.ParseIntoArrayLines(*mCharacterMap);
+
+	return success;
+}
+
+// ----------------------------------------- 
+void UTiledMap::ClearCharacterMap()
+{
+	mCharacterMap->~TArray();
+	mCharacterMap = nullptr;
+}
+
+// ----------------------------------------- 
+void UTiledMap::GetCellData(const PositionPair position, FMapTileData& output)
+{
+	output.ClearData();
+
+	const char& character = (*mCharacterMap)[position.Value][position.Key];
+
+	if (isFloor(character))
+	{
+		output.SetType(eTileType::FLOOR);
+	}
+	else if (isWall(character))
+	{
+		output.SetType(eTileType::WALL);
+		if (isHorizontal(character))
+		{
+			output.SetRotation(90.0);
+		}
+	}
+	else if(isCross(character))
+	{
+		ResolveCross(position, output);
+	}
+}
+
+// ----------------------------------------- 
+void UTiledMap::ResolveCross(const PositionPair position, FMapTileData& output)
+{
+	FGridNeighborhood neighbors(position);
+
+	const auto& map = *mCharacterMap;
+	const auto& InBound = [&map](PositionPair& pos)
+		{
+			return ( map.IsValidIndex(pos.Value) && map[pos.Value].IsValidIndex(pos.Key) );
+		};
+
+	const bool adjacent[4] =
+	{
+		InBound(neighbors.north) && map[neighbors.north.Value][neighbors.north.Key] == eCharacter::VERTICAL_WALL,
+		InBound(neighbors.south) && map[neighbors.south.Value][neighbors.south.Key] == eCharacter::VERTICAL_WALL,
+		InBound(neighbors.east) && map[neighbors.east.Value][neighbors.east.Key] == eCharacter::HORIZONTAL_WALL,
+		InBound(neighbors.west) && map[neighbors.west.Value][neighbors.west.Key] == eCharacter::HORIZONTAL_WALL,
+	};
+
+	const bool isVertical = adjacent[eCoordinates::NORTH] && adjacent[eCoordinates::SOUTH];
+	const bool isHorizontal = adjacent[eCoordinates::EAST] && adjacent[eCoordinates::WEST];
+
+	if (isVertical)
+	{
+		// Walls in T
+		if (isHorizontal)
+		{
+			output.SetType(eTileType::WALL_CROSS);
+		}
+		else if(adjacent[eCoordinates::EAST])
+		{
+			output.SetType(eTileType::WALL_PERPENDICULAR);
+			output.SetRotation(0.0);
+		}
+		else if (adjacent[eCoordinates::WEST])
+		{
+			output.SetType(eTileType::WALL_PERPENDICULAR);
+			output.SetRotation(180.0);
+		}
+		else
+		{
+			output.SetType(eTileType::WALL);
+			output.SetRotation(0.0);
+		}
+	}
+	else if (isHorizontal)
+	{
+		if (adjacent[eCoordinates::NORTH])
+		{
+			output.SetType(eTileType::WALL_PERPENDICULAR);
+			output.SetRotation(-90.0);
+		}
+		else if (adjacent[eCoordinates::SOUTH])
+		{
+			output.SetType(eTileType::WALL_PERPENDICULAR);
+			output.SetRotation(90.0);
+		}
+		else
+		{
+			output.SetType(eTileType::WALL);
+			output.SetRotation(90.0);
+		}
+	}
+	else 
+	{
+		// Corners
+		if (adjacent[eCoordinates::NORTH])
+		{
+			if(adjacent[eCoordinates::EAST])
+			{
+				output.SetType(eTileType::WALL_CORNER);
+				output.SetRotation(-90.0);
+			}
+			else if (adjacent[eCoordinates::WEST])
+			{
+				output.SetType(eTileType::WALL_CORNER);
+				output.SetRotation(180.0);
+			}
+			else
+			{
+				output.SetType(eTileType::WALL);
+				output.SetRotation(0.0);
+			}
+		}
+		else if (adjacent[eCoordinates::SOUTH])
+		{
+			if (adjacent[eCoordinates::EAST])
+			{
+				output.SetType(eTileType::WALL_CORNER);
+				output.SetRotation(0.0);
+			}
+			else if (adjacent[eCoordinates::WEST])
+			{
+				output.SetType(eTileType::WALL_CORNER);
+				output.SetRotation(90.0);
+			}
+			else
+			{
+				output.SetType(eTileType::WALL);
+				output.SetRotation(0.0);
+			}
+		}
+		else
+		{
+			// Edge cases to cross wall
+			output.SetType(eTileType::WALL_CROSS);
+		}
+	}
+}
+
+// ----------------------------------------- 
+// FGridNeighborhood
+// ----------------------------------------- 
+// ----------------------------------------- 
+FGridNeighborhood::FGridNeighborhood(const PositionPair cellPosition)
+{
+	north = {cellPosition.Key, cellPosition.Value + 1};
+	south = {cellPosition.Key, cellPosition.Value - 1};
+	east  = {cellPosition.Key - 1, cellPosition.Value};
+	west  = {cellPosition.Key + 1, cellPosition.Value };
+}
+
+// ----------------------------------------- 
+// FMapTileData
+// ----------------------------------------- 
+// ----------------------------------------- 
 inline void FMapTileData::ClearData()
 {
 	Type = eTileType::NONE;
@@ -13,197 +232,4 @@ inline void FMapTileData::ClearData()
 	Location.X = 0.0;
 	Location.Y = 0.0;
 	Location.Z = 0.0;
-}
-
-TArray<FMapTileData> UTiledMap::LoadMapArray(const FString fileName, const float multiplier)
-{
-	using PositionPair = std::pair<int, int>;
-	using GridMap = std::map<PositionPair, char>;
-
-	TArray<FMapTileData> output;
-
-	FMapTileData outputElement;
-	FString rawText;
-
-	GridMap gridMap; 
-	std::vector<PositionPair> unresolvedCrosses;
-
-	if (FFileHelper::LoadFileToString(rawText, *(FPaths::ProjectDir() + fileName)))
-	{
-		PositionPair offset = std::make_pair(0,0);
-
-		for (const auto& character : rawText)
-		{
-			outputElement.ClearData();
-
-			if (!UTiledMap::isNewLine(character))
-			{
-				outputElement.SetLocation(GetMultipliedLocation(offset, multiplier));
-				// Wall can be rotated
-				if (UTiledMap::isWall(character))
-				{
-					outputElement.Type = eTileType::WALL;
-
-					if (UTiledMap::isRotated(character))
-					{
-						outputElement.Rotation = 90.0;
-					}
-					else
-					{
-						outputElement.Rotation = 0.0;
-					}
-
-					gridMap[offset] = character;
-					// Insert to output
-					output.Push(outputElement);
-					// Also needs floor
-					outputElement.SetType(eTileType::FLOOR);
-					outputElement.Rotation = 0.0;
-					output.Push(outputElement);
-				}
-				else if (UTiledMap::isCross(character))
-				{
-					unresolvedCrosses.push_back(offset);
-				}
-				else if(UTiledMap::isFloor(character))
-				{
-					outputElement.SetType(eTileType::FLOOR);
-					output.Push(outputElement);
-				}
-
-				++offset.first;
-			}
-			else
-			{
-				offset.first = 0; // Reset columns
-				++offset.second;  // Advance Row
-			}
-		}
-	}
-
-	ResolveCrosses(unresolvedCrosses, gridMap, multiplier, output);
-
-	return output;
-}
-
-void UTiledMap::ResolveCrosses(std::vector<PositionPair>& unresolvedCrosses, GridMap& gridMap, const float multiplier, TArray<FMapTileData>& output)
-{
-	using PositionPair = std::pair<int, int>;
-	using GridMap = std::map<PositionPair, char>;
-
-	FMapTileData dataToFill;
-
-	for (auto& cross : unresolvedCrosses)
-	{
-		const PositionPair north = { cross.first, cross.second + 1 };
-		const PositionPair south = { cross.first, cross.second - 1 };
-		const PositionPair east = { cross.first - 1, cross.second };
-		const PositionPair west = { cross.first + 1, cross.second };
-
-		std::set<int> adjacency;
-
-		if (gridMap.find(north) != gridMap.end())
-		{
-			if (gridMap[north] == eCharacter::VERTICAL_WALL)
-			{
-				adjacency.insert(eCoordinates::NORTH);
-			}
-		}
-		if (gridMap.find(south) != gridMap.end())
-		{
-			if (gridMap[south] == eCharacter::VERTICAL_WALL)
-			{
-				adjacency.insert(eCoordinates::SOUTH);
-			}
-		}
-		if (gridMap.find(east) != gridMap.end())
-		{
-			if (gridMap[east] == eCharacter::HORIZONTAL_WALL)
-			{
-				adjacency.insert(eCoordinates::EAST);
-			}
-		}
-		if (gridMap.find(west) != gridMap.end())
-		{
-			if (gridMap[west] == eCharacter::HORIZONTAL_WALL)
-			{
-				adjacency.insert(eCoordinates::WEST);
-			}
-		}
-
-		dataToFill.ClearData();
-		dataToFill.SetType(eTileType::WALL_CROSS);
-		dataToFill.SetLocation(GetMultipliedLocation(cross, multiplier));
-
-		const bool N_Seek = adjacency.find(eCoordinates::NORTH) != adjacency.end();
-		const bool S_Seek = adjacency.find(eCoordinates::SOUTH) != adjacency.end();
-		const bool E_Seek = adjacency.find(eCoordinates::EAST) != adjacency.end();
-		const bool W_Seek = adjacency.find(eCoordinates::WEST) != adjacency.end();
-
-		const bool isVerticalContinuous = N_Seek && S_Seek;
-		const bool isHorizontalContinuous = E_Seek && W_Seek;
-
-		switch (adjacency.size())
-		{
-		case 3:
-			dataToFill.SetType(eTileType::WALL_PERPENDICULAR);
-			if (isVerticalContinuous)
-			{
-				if (W_Seek)
-				{
-					dataToFill.SetRotation(180.0f);
-				}
-				else
-				{
-					dataToFill.SetRotation(0.0f);
-				}
-			}
-			else
-			{
-				if (S_Seek)
-				{
-					dataToFill.SetRotation(90.0f);
-				}
-				else
-				{
-					dataToFill.SetRotation(-90.0f);
-				}
-			}
-			break;
-		case 2:
-			if (!( N_Seek && S_Seek) && !isHorizontalContinuous)
-			{
-				dataToFill.SetType(eTileType::WALL_CORNER);
-				if (W_Seek)
-				{
-					if (S_Seek)
-					{
-						dataToFill.SetRotation(90.0f);
-					}
-					else
-					{
-						dataToFill.SetRotation(180.0f);
-					}
-				}
-				else
-				{
-					if (S_Seek)
-					{
-						dataToFill.SetRotation(0.0f);
-					}
-					else
-					{
-						dataToFill.SetRotation(-90.0f);
-					}
-				}
-			}
-			break;
-		}
-
-		output.Push(dataToFill);
-		// Also needs floor
-		dataToFill.SetType(eTileType::FLOOR);
-		dataToFill.Rotation = 0.0;
-		output.Push(dataToFill);
-	}
 }

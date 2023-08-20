@@ -143,7 +143,7 @@ void UTiledMap::ResolveCross(const PositionPair position, FMapTileData& output)
 	switch (adjacency)
 	{
 	case ePatterns::SEW:
-	case ePatterns::WE:
+	case ePatterns::EW:
 	case ePatterns::SW:
 	case ePatterns::E:
 	case ePatterns::W:

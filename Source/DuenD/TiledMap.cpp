@@ -99,6 +99,7 @@ void UTiledMap::GetCellData(const PositionPair position, FMapTileData& output)
 	}
 }
 
+
 // ----------------------------------------- 
 void UTiledMap::ResolveCross(const PositionPair position, FMapTileData& output)
 {
@@ -110,110 +111,54 @@ void UTiledMap::ResolveCross(const PositionPair position, FMapTileData& output)
 			return ( map.IsValidIndex(pos.Value) && map[pos.Value].IsValidIndex(pos.Key) );
 		};
 
-	const bool adjacent[4] =
-	{
-		InBound(neighbors.north) && map[neighbors.north.Value][neighbors.north.Key] == eCharacter::VERTICAL_WALL,
-		InBound(neighbors.south) && map[neighbors.south.Value][neighbors.south.Key] == eCharacter::VERTICAL_WALL,
-		InBound(neighbors.east) && map[neighbors.east.Value][neighbors.east.Key] == eCharacter::HORIZONTAL_WALL,
-		InBound(neighbors.west) && map[neighbors.west.Value][neighbors.west.Key] == eCharacter::HORIZONTAL_WALL,
-	};
+	int32 adjacency = (
+		  (InBound(neighbors.north) && map[neighbors.north.Value][neighbors.north.Key] == eCharacter::VERTICAL_WALL ? ePatterns::N : 0)
+		| (InBound(neighbors.south) && map[neighbors.south.Value][neighbors.south.Key] == eCharacter::VERTICAL_WALL ? ePatterns::S : 0)
+		| (InBound(neighbors.east) && map[neighbors.east.Value][neighbors.east.Key] == eCharacter::HORIZONTAL_WALL ? ePatterns::E : 0)
+		| (InBound(neighbors.west) && map[neighbors.west.Value][neighbors.west.Key] == eCharacter::HORIZONTAL_WALL ? ePatterns::W : 0));
 
-	const bool isVertical = adjacent[eCoordinates::NORTH] && adjacent[eCoordinates::SOUTH];
-	const bool isHorizontal = adjacent[eCoordinates::EAST] && adjacent[eCoordinates::WEST];
+	// TYPE
+	switch (adjacency)
+	{
+	case ePatterns::NEW:
+	case ePatterns::NSW:
+	case ePatterns::NSE:
+	case ePatterns::SEW:
+		output.SetType(eTileType::WALL_T);
+		break;
+	case ePatterns::NW:
+	case ePatterns::NE:
+	case ePatterns::SW:
+	case ePatterns::SE:
+		output.SetType(eTileType::WALL_CORNER);
+		break;
+	case ePatterns::NEWS:
+		output.SetType(eTileType::WALL_CROSS);
+		break;
+	default:
+		output.SetType(eTileType::WALL);
+	}
 
-	if (isVertical)
+	// ROTATION
+	switch (adjacency)
 	{
-		// Walls in T
-		if (isHorizontal)
-		{
-			output.SetType(eTileType::WALL_CROSS);
-		}
-		else if(adjacent[eCoordinates::EAST])
-		{
-			output.SetType(eTileType::WALL_PERPENDICULAR);
-			output.SetRotation(0.0);
-		}
-		else if (adjacent[eCoordinates::WEST])
-		{
-			output.SetType(eTileType::WALL_PERPENDICULAR);
-			output.SetRotation(180.0);
-		}
-		else
-		{
-			output.SetType(eTileType::WALL);
-			output.SetRotation(0.0);
-		}
-	}
-	else if (isHorizontal)
-	{
-		if (adjacent[eCoordinates::NORTH])
-		{
-			output.SetType(eTileType::WALL_PERPENDICULAR);
-			output.SetRotation(-90.0);
-		}
-		else if (adjacent[eCoordinates::SOUTH])
-		{
-			output.SetType(eTileType::WALL_PERPENDICULAR);
-			output.SetRotation(90.0);
-		}
-		else
-		{
-			output.SetType(eTileType::WALL);
-			output.SetRotation(90.0);
-		}
-	}
-	else 
-	{
-		// Corners
-		if (adjacent[eCoordinates::NORTH])
-		{
-			if(adjacent[eCoordinates::EAST])
-			{
-				output.SetType(eTileType::WALL_CORNER);
-				output.SetRotation(-90.0);
-			}
-			else if (adjacent[eCoordinates::WEST])
-			{
-				output.SetType(eTileType::WALL_CORNER);
-				output.SetRotation(180.0);
-			}
-			else
-			{
-				output.SetType(eTileType::WALL);
-				output.SetRotation(0.0);
-			}
-		}
-		else if (adjacent[eCoordinates::SOUTH])
-		{
-			if (adjacent[eCoordinates::EAST])
-			{
-				output.SetType(eTileType::WALL_CORNER);
-				output.SetRotation(0.0);
-			}
-			else if (adjacent[eCoordinates::WEST])
-			{
-				output.SetType(eTileType::WALL_CORNER);
-				output.SetRotation(90.0);
-			}
-			else
-			{
-				output.SetType(eTileType::WALL);
-				output.SetRotation(0.0);
-			}
-		}
-		else
-		{
-			if (adjacent[eCoordinates::EAST] || adjacent[eCoordinates::WEST])
-			{
-				output.SetType(eTileType::WALL);
-				output.SetRotation(90.0);
-			}
-			else if (adjacent[eCoordinates::WEST])
-			{
-				// Edge cases to cross wall
-				output.SetType(eTileType::WALL_CROSS);
-			}
-		}
+	case ePatterns::SEW:
+	case ePatterns::WE:
+	case ePatterns::SW:
+	case ePatterns::E:
+	case ePatterns::W:
+		output.SetRotation(90);
+		break;
+	case ePatterns::NSW:
+	case ePatterns::NW:
+		output.SetRotation(180);
+		break;
+	case ePatterns::NE:
+	case ePatterns::NEW:
+		output.SetRotation(270);
+		break;
+	default:
+		output.SetRotation(0);
 	}
 }
 

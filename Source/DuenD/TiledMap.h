@@ -16,7 +16,7 @@ enum eTileType
     WALL,
     WALL_CROSS,
     WALL_CORNER,
-    WALL_PERPENDICULAR
+    WALL_T
 };
 
 /** UTiledMap
@@ -82,6 +82,26 @@ private:
         SOUTH,
         EAST,
         WEST
+    };
+
+    enum ePatterns
+    {
+        NONE = 0b0000,
+        N    = 0b1000,
+        S    = 0b0100,
+        E    = 0b0010,
+        W    = 0b0001,
+        NW   = 0b1001,
+        NE   = 0b1010,
+        NS   = 0b1100,
+        WE   = 0b0011,
+        SW   = 0b0101,
+        SE   = 0b0110,
+        NEW  = 0b1011,
+        NSW  = 0b1101,
+        NSE  = 0b1110,
+        SEW  = 0b0111,
+        NEWS = 0b1111,
     };
 
     // Contains the character map in a 2d array
